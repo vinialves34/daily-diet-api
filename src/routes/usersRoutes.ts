@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { hash } from 'bcrypt'
+import { compare, hash } from 'bcrypt'
 import { knex } from '../database'
 
 export async function usersRoutes(app: FastifyInstance) {
@@ -29,5 +29,37 @@ export async function usersRoutes(app: FastifyInstance) {
     })
 
     return reply.status(201).send()
+  })
+
+  app.post('/login', async (request, reply) => {
+    const loginUserBodySchema = z.object({
+      email: z.string().email(),
+      password: z.string(),
+    })
+
+    const { email, password } = loginUserBodySchema.parse(request.body)
+
+    const user = await knex('users').where('email', email).first()
+
+    if (!user)
+      return reply.status(401).send({ message: 'Email or password incorrect!' })
+
+    const passwordMatch = await compare(password, user.password)
+
+    if (!passwordMatch)
+      return reply.status(401).send({ message: 'Email or password incorrect!' })
+
+    request.session.user = { sessionId: crypto.randomUUID(), email }
+
+    return reply.send({
+      message: 'Login successful!',
+      user: { email: user.email, name: user.name },
+    })
+  })
+
+  app.post('/logout', async (request, reply) => {
+    request.session.user = null
+
+    reply.send({ message: 'Logout successful!' })
   })
 }
